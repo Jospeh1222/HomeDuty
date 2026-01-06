@@ -23,7 +23,7 @@ public class MainFrame extends JFrame {
         taskDAO.distributeTasksAtLogin(user.getAileId());
 
         setTitle("HomeDuty Ana Panel - " + user.getAd());
-        setSize(600, 650);
+        setSize(600, 680);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
@@ -37,7 +37,7 @@ public class MainFrame extends JFrame {
         updateInfoLabel(); // Puan ve Rozet bilgisini yazar
         pnlTop.add(lblInfo, BorderLayout.WEST);
 
-        JButton btnLogout = new JButton("Çıkış Yap "+"-> "+user.getAd());
+        JButton btnLogout = new JButton("Çıkış Yap " + "-> " + user.getAd());
         btnLogout.setBackground(new Color(255, 102, 102));
         btnLogout.setForeground(Color.WHITE);
         btnLogout.setFocusable(false);
@@ -47,13 +47,11 @@ public class MainFrame extends JFrame {
 
         // --- MERKEZİ YENİLEME MANTIĞI (Refresh) ---
         Runnable refreshUI = () -> {
-            // Veritabanından güncel puanı çek
             User updatedUser = userDAO.getUserById(currentUser.getId());
             if (updatedUser != null) {
                 this.currentUser = updatedUser;
                 updateInfoLabel();
             }
-            // Tabloyu (JTable) temizle ve yeniden doldur
             taskTableModel.setRowCount(0);
             java.util.List<Object[]> myTasks = taskDAO.getMyPendingTasks(currentUser.getId());
             for (Object[] row : myTasks) {
@@ -71,10 +69,9 @@ public class MainFrame extends JFrame {
         JButton btnSearch = new JButton("Görev Ara");
         JButton btnAdd = new JButton("Yeni Görev Ekle");
         JButton btnDelete = new JButton("Görev Sil");
-        JButton btnCursorFunc = new JButton("Detaylı Döküm (Cursor)");
+        JButton btnCursorFunc = new JButton("Detaylı Döküm");
         JButton btnComplete = new JButton("Seçili Görevi Tamamladım!");
 
-        // Tasarımsal Renklendirme
         btnComplete.setBackground(new Color(144, 238, 144));
         btnComplete.setFont(new Font("Arial", Font.BOLD, 12));
 
@@ -110,9 +107,16 @@ public class MainFrame extends JFrame {
         scrollPane.setBorder(BorderFactory.createTitledBorder("Üzerimdeki Bekleyen Görevler"));
         add(scrollPane, BorderLayout.SOUTH);
 
+        // --- MADDE 13: YETKİLENDİRME KONTROLÜ ---
+        if (currentUser.getRol().equalsIgnoreCase("Çocuk")) {
+            btnDelete.setEnabled(false);
+            btnDelete.setToolTipText("Görev silme yetkiniz yok.");
+            btnResetAndClose.setEnabled(false);
+            btnResetAndClose.setToolTipText("Sistemi sıfırlama yetkiniz yok.");
+        }
+
         // --- BUTON AKSİYONLARI ---
 
-        // Çıkış Yap
         btnLogout.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Oturum kapatılsın mı?", "Çıkış", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
                 this.dispose();
@@ -120,16 +124,16 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 10: Aile İstatistikleri (Aggregate)
+        // MADDE 6 & 10: View ve Aggregate kullanımı
         btnList.addActionListener(e -> taskDAO.showFamilyDetailedStats(currentUser.getAileId()));
 
-        // MADDE 7: Görev Ara (Index Kullanımı)
+        // MADDE 7: Index Kullanımı
         btnSearch.addActionListener(e -> {
             String keyword = JOptionPane.showInputDialog(this, "Aranacak görev adı:");
             if (keyword != null && !keyword.isEmpty()) taskDAO.searchTasksWithIndex(keyword);
         });
 
-        // MADDE 4 & 8: Yeni Görev Ekle (Procedure & Auto-Assign)
+        // MADDE 4 & 8: Procedure & Auto-Assign
         btnAdd.addActionListener(e -> {
             String taskName = JOptionPane.showInputDialog(this, "Görev başlığı:");
             String pointsStr = JOptionPane.showInputDialog(this, "Puan değeri:");
@@ -139,19 +143,19 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 4: Görev Silme (İki Aşamalı Seçenekli Silme)
+        // MADDE 4: İki Aşamalı Silme
         btnDelete.addActionListener(e -> {
             Object[] options = {"Sadece Ailemden Kaldır", "Sistemden Tamamen Sil", "İptal"};
             int choice = JOptionPane.showOptionDialog(this, "Silme türünü seçin:", "Görev Silme",
                     JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
 
-            if (choice == 0) { // Assignments Tablosundan Silme
+            if (choice == 0) {
                 String idStr = JOptionPane.showInputDialog(this, "Silinecek Atama ID:");
                 if (idStr != null) {
                     taskDAO.deleteAssignment(Integer.parseInt(idStr), currentUser.getAileId());
                     refreshUI.run();
                 }
-            } else if (choice == 1) { // Tasks Tablosundan Global Silme
+            } else if (choice == 1) {
                 String idStr = JOptionPane.showInputDialog(this, "Sistemden silinecek Görev ID:");
                 if (idStr != null) {
                     taskDAO.deleteGlobalTask(Integer.parseInt(idStr));
@@ -160,10 +164,10 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 11: Görev Detayları (Cursor Kullanımı)
+        // MADDE 11: Cursor Kullanımı
         btnCursorFunc.addActionListener(e -> taskDAO.callTaskCursorFunction(currentUser.getId()));
 
-        // MADDE 12: Görev Tamamlama (Trigger Tetikleyici)
+        // MADDE 12: Trigger Tetikleyici
         btnComplete.addActionListener(e -> {
             int selectedRow = tblMyTasks.getSelectedRow();
             if (selectedRow != -1) {
@@ -176,7 +180,7 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // Sistemi Sıfırla (DDL: TRUNCATE ve DML: UPDATE)
+        // Sıfırlama ve Kapatma
         btnResetAndClose.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(this, "Tüm puanlar ve atamalar sıfırlanacaktır. Emin misiniz?", "Sıfırla", JOptionPane.YES_NO_OPTION);
             if (confirm == JOptionPane.YES_OPTION) {
@@ -185,7 +189,6 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // İlk açılışta tabloyu doldur
         refreshUI.run();
     }
 
