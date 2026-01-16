@@ -6,23 +6,23 @@ import java.sql.*;
 
 public class UserDAO {
 
+    // Giriş İşlemi (SQL Sunucuda Fonksiyon Çağrısı)
     public User login(String username) {
-        // SELECT * kullanarak tüm sütunları (aile_id dahil) çekiyoruz
-        String sql = "SELECT * FROM Users WHERE ad = ?";
+        // Java sadece fonksiyonu tetikler, tablo adını veya sütunları bilmez
+        String sql = "{call sp_login_user(?)}";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             CallableStatement cstmt = conn.prepareCall(sql)) {
 
-            pstmt.setString(1, username);
-            ResultSet rs = pstmt.executeQuery();
+            cstmt.setString(1, username);
+            ResultSet rs = cstmt.executeQuery();
 
             if (rs.next()) {
-                // KRİTİK NOKTA: rs.getInt("aile_id") kısmını unutmuş olabilirsin
                 return new User(
-                        rs.getInt("kullanici_id"),
-                        rs.getString("ad"),
-                        rs.getString("rol"),
-                        rs.getInt("puan"),
-                        rs.getInt("aile_id") // Aile ID'sini buradan alıyoruz
+                        rs.getInt("id"),
+                        rs.getString("isim"),
+                        rs.getString("gorev_rol"),
+                        rs.getInt("skorpuan"),
+                        rs.getInt("aile")
                 );
             }
         } catch (SQLException e) {
@@ -31,34 +31,46 @@ public class UserDAO {
         return null;
     }
 
+    // Kullanıcı Kaydı (SQL Sunucuda Prosedür Çağrısı)
     public boolean registerUser(String ad, String rol, int aileId) {
-        String sql = "INSERT INTO Users (ad, rol, aile_id, puan) VALUES (?, ?, ?, 0)";
+        // INSERT komutu artık sunucu tarafındaki PROCEDURE içinde
+        String sql = "CALL sp_register_user(?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             CallableStatement cstmt = conn.prepareCall(sql)) {
 
-            pstmt.setString(1, ad);
-            pstmt.setString(2, rol);
-            pstmt.setInt(3, aileId);
+            cstmt.setString(1, ad);
+            cstmt.setString(2, rol);
+            cstmt.setInt(3, aileId);
 
-            int affectedRows = pstmt.executeUpdate();
-            return affectedRows > 0;
+            cstmt.execute();
+            return true;
         } catch (SQLException e) {
             System.err.println("Kayıt hatası: " + e.getMessage());
             return false;
         }
     }
 
-    // UserDAO.java içine eklenecek
+    // ID ile Veri Tazeleme (SQL Sunucuda Fonksiyon Çağrısı)
     public User getUserById(int userId) {
-        String sql = "SELECT * FROM Users WHERE kullanici_id = ?";
+        String sql = "{call sp_get_user_by_id(?)}";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, userId);
-            ResultSet rs = pstmt.executeQuery();
+             CallableStatement cstmt = conn.prepareCall(sql)) {
+
+            cstmt.setInt(1, userId);
+            ResultSet rs = cstmt.executeQuery();
+
             if (rs.next()) {
-                return new User(rs.getInt("kullanici_id"), rs.getString("ad"), rs.getString("rol"), rs.getInt("puan"), rs.getInt("aile_id"));
+                return new User(
+                        rs.getInt("id"),
+                        rs.getString("isim"),
+                        rs.getString("gorev_rol"),
+                        rs.getInt("skorpuan"),
+                        rs.getInt("aile")
+                );
             }
-        } catch (SQLException e) { e.printStackTrace(); }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 }
