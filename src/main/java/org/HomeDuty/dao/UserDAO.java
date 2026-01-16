@@ -8,7 +8,7 @@ public class UserDAO {
 
     // Giriş İşlemi (SQL Sunucuda Fonksiyon Çağrısı)
     public User login(String username) {
-        // Java sadece fonksiyonu tetikler, tablo adını veya sütunları bilmez
+
         String sql = "{call sp_login_user(?)}";
         try (Connection conn = DatabaseConnection.getConnection();
              CallableStatement cstmt = conn.prepareCall(sql)) {
@@ -33,7 +33,6 @@ public class UserDAO {
 
     // Kullanıcı Kaydı (SQL Sunucuda Prosedür Çağrısı)
     public boolean registerUser(String ad, String rol, int aileId) {
-        // INSERT komutu artık sunucu tarafındaki PROCEDURE içinde
         String sql = "CALL sp_register_user(?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
              CallableStatement cstmt = conn.prepareCall(sql)) {

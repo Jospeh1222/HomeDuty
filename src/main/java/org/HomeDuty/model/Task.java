@@ -4,12 +4,11 @@ public class Task {
     private int id;
     private String baslik;
     private int puanDegeri;
-    private String zorlukSeviyesi; // "Kolay", "Orta", "Zor" gibi
+    private String zorlukSeviyesi;
 
-    // Boş Constructor (Bazı kütüphaneler için gerekli olabilir)
     public Task() {}
 
-    // Tüm alanları içeren Constructor
+
     public Task(int id, String baslik, int puanDegeri, String zorlukSeviyesi) {
         this.id = id;
         this.baslik = baslik;
@@ -17,8 +16,7 @@ public class Task {
         this.zorlukSeviyesi = zorlukSeviyesi;
     }
 
-    // Getter ve Setter Metotları
-    // (Arayüzde tabloya veri basarken bu metotlar kullanılacak)
+
 
     public int getId() {
         return id;
@@ -52,7 +50,6 @@ public class Task {
         this.zorlukSeviyesi = zorlukSeviyesi;
     }
 
-    // Raporunda veya konsol testlerinde kolaylık sağlaması için toString()
     @Override
     public String toString() {
         return "Görev: " + baslik + " (Puan: " + puanDegeri + ", Zorluk: " + zorlukSeviyesi + ")";

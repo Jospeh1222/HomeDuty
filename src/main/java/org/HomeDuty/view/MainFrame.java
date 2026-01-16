@@ -19,7 +19,7 @@ public class MainFrame extends JFrame {
         this.taskDAO = new TaskDAO();
         this.userDAO = new UserDAO();
 
-        // MADDE 8: Giriş anında sahipsiz görevleri aileye otomatik/rastgele dağıt
+        //Giriş anında sahipsiz görevleri aileye otomatik/rastgele dağıt
         taskDAO.distributeTasksAtLogin(user.getAileId());
 
         setTitle("HomeDuty Ana Panel - " + user.getAd());
@@ -28,7 +28,7 @@ public class MainFrame extends JFrame {
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // --- ÜST KISIM: KULLANICI BİLGİLERİ VE LOGOUT ---
+        //ÜST KISIM: KULLANICI BİLGİLERİ VE LOGOUT
         JPanel pnlTop = new JPanel(new BorderLayout());
         pnlTop.setBackground(new Color(230, 230, 230));
         pnlTop.setBorder(BorderFactory.createEmptyBorder(10, 15, 10, 15));
@@ -45,7 +45,7 @@ public class MainFrame extends JFrame {
 
         add(pnlTop, BorderLayout.NORTH);
 
-        // --- MERKEZİ YENİLEME MANTIĞI (Refresh) ---
+        // MERKEZİ YENİLEME MANTIĞI
         Runnable refreshUI = () -> {
             User updatedUser = userDAO.getUserById(currentUser.getId());
             if (updatedUser != null) {
@@ -59,7 +59,7 @@ public class MainFrame extends JFrame {
             }
         };
 
-        // --- ORTA KISIM: İŞLEM BUTONLARI ---
+        // ORTA KISIM: İŞLEM BUTONLARI
         JPanel pnlCenterWrapper = new JPanel(new BorderLayout());
 
         JPanel pnlCenter = new JPanel(new GridLayout(0, 2, 12, 12));
@@ -82,7 +82,7 @@ public class MainFrame extends JFrame {
         pnlCenter.add(btnCursorFunc);
         pnlCenter.add(btnComplete);
 
-        // --- SIFIRLAMA BUTONU (Ortalanmış Alt Panel) ---
+        //  SIFIRLAMA BUTONU
         JPanel pnlReset = new JPanel(new FlowLayout(FlowLayout.CENTER));
         pnlReset.setBorder(BorderFactory.createEmptyBorder(0, 30, 20, 30));
 
@@ -98,7 +98,7 @@ public class MainFrame extends JFrame {
 
         add(pnlCenterWrapper, BorderLayout.CENTER);
 
-        // --- ALT KISIM: GÖREV TABLOSU (JTable) ---
+        //  ALT KISIM: GÖREV TABLOSU (JTable)
         String[] columnNames = {"Atama ID", "Görev Adı", "Puan"};
         taskTableModel = new DefaultTableModel(columnNames, 0);
         JTable tblMyTasks = new JTable(taskTableModel);
@@ -107,7 +107,7 @@ public class MainFrame extends JFrame {
         scrollPane.setBorder(BorderFactory.createTitledBorder("Üzerimdeki Bekleyen Görevler"));
         add(scrollPane, BorderLayout.SOUTH);
 
-        // --- MADDE 13: YETKİLENDİRME KONTROLÜ ---
+        // YETKİLENDİRME KONTROLÜ
         if (currentUser.getRol().equalsIgnoreCase("Çocuk")) {
             btnDelete.setEnabled(false);
             btnDelete.setToolTipText("Görev silme yetkiniz yok.");
@@ -115,7 +115,7 @@ public class MainFrame extends JFrame {
             btnResetAndClose.setToolTipText("Sistemi sıfırlama yetkiniz yok.");
         }
 
-        // --- BUTON AKSİYONLARI ---
+        //  BUTON AKSİYONLARI
 
         btnLogout.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Oturum kapatılsın mı?", "Çıkış", JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION) {
@@ -124,16 +124,15 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 6 & 10: View ve Aggregate kullanımı
+
         btnList.addActionListener(e -> taskDAO.showFamilyDetailedStats(currentUser.getAileId()));
 
-        // MADDE 7: Index Kullanımı
+
         btnSearch.addActionListener(e -> {
             String keyword = JOptionPane.showInputDialog(this, "Aranacak görev adı:");
             if (keyword != null && !keyword.isEmpty()) taskDAO.searchTasksWithIndex(keyword);
         });
 
-        // MADDE 4 & 8: Procedure & Auto-Assign
         btnAdd.addActionListener(e -> {
             String taskName = JOptionPane.showInputDialog(this, "Görev başlığı:");
             String pointsStr = JOptionPane.showInputDialog(this, "Puan değeri:");
@@ -143,7 +142,6 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 4: İki Aşamalı Silme
         btnDelete.addActionListener(e -> {
             Object[] options = {"Sadece Ailemden Kaldır", "Sistemden Tamamen Sil", "İptal"};
             int choice = JOptionPane.showOptionDialog(this, "Silme türünü seçin:", "Görev Silme",
@@ -164,10 +162,8 @@ public class MainFrame extends JFrame {
             }
         });
 
-        // MADDE 11: Cursor Kullanımı
         btnCursorFunc.addActionListener(e -> taskDAO.callTaskCursorFunction(currentUser.getId()));
 
-        // MADDE 12: Trigger Tetikleyici
         btnComplete.addActionListener(e -> {
             int selectedRow = tblMyTasks.getSelectedRow();
             if (selectedRow != -1) {
