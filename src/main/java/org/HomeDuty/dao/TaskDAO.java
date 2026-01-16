@@ -9,50 +9,54 @@ import java.util.List;
 
 public class TaskDAO {
 
-    // MADDE 5 & 7: INDEX kullanarak arama
+    // MADDE 5 & 7: INDEX Kullanarak Arama (SQL Sunucuda)
     public void searchTasksWithIndex(String keyword) {
-        String sql = "SELECT * FROM Tasks WHERE baslik ILIKE ?";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             CallableStatement cstmt = conn.prepareCall("{call sp_search_tasks(?)}")) {
 
-            pstmt.setString(1, "%" + keyword + "%");
-            ResultSet rs = pstmt.executeQuery();
+            cstmt.setString(1, keyword);
+            ResultSet rs = cstmt.executeQuery();
 
             StringBuilder results = new StringBuilder("Arama Sonuçları:\n");
             boolean found = false;
             while (rs.next()) {
                 found = true;
-                results.append("ID: ").append(rs.getInt("gorev_id"))
-                        .append(" - ").append(rs.getString("baslik")).append("\n");
+                results.append("ID: ").append(rs.getInt("id"))
+                        .append(" - ").append(rs.getString("isim")).append("\n");
             }
             JOptionPane.showMessageDialog(null, found ? results.toString() : "Sonuç bulunamadı.");
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // MADDE 6: VIEW Kullanımı
+    // MADDE 6: VIEW ve HTML Gösterimi (SQL Sunucuda)
     public void showFamilyDetailedStats(int familyId) {
-        String sql = "SELECT * FROM vw_family_task_details WHERE aile_id = ? ORDER BY kullanici_adi ASC";
+        // Java içinde SELECT/FROM/WHERE yok, sadece fonksiyonu çağırıyoruz
+        String sql = "{call sp_get_family_details(?)}";
+
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             CallableStatement cstmt = conn.prepareCall(sql)) {
 
-            pstmt.setInt(1, familyId);
-            ResultSet rs = pstmt.executeQuery();
+            cstmt.setInt(1, familyId);
+            ResultSet rs = cstmt.executeQuery();
 
+            // --- SENİN TASARIMIN (KORUNDU) ---
             StringBuilder stats = new StringBuilder("<html><body style='font-family:sans-serif;'>");
-            stats.append("<h3>Aile Üyeleri ve Görev Dağılımı (VIEW)</h3><hr>");
+            stats.append("<h3>Aile Üyeleri ve Görev Dağılımı (Stored Function & View)</h3><hr>");
 
             String lastUser = "";
             while (rs.next()) {
-                String currentUser = rs.getString("kullanici_adi");
-                String taskName = rs.getString("gorev_adi");
-                String status = rs.getString("gorev_durumu");
-                int taskPuan = rs.getInt("gorev_puani");
+                String currentUser = rs.getString("k_adi");
+                String taskName = rs.getString("g_adi");
+                String status = rs.getString("g_durumu");
+                int taskPuan = rs.getInt("g_puani");
 
+                // Kullanıcı Gruplama Mantığı
                 if (!currentUser.equals(lastUser)) {
-                    stats.append("<br><b>").append(currentUser.toUpperCase()).append(" ").append(rs.getInt("toplam_puan")).append("</b><br>");
+                    stats.append("<br><b>").append(currentUser.toUpperCase()).append(" ").append(rs.getInt("t_puan")).append("</b><br>");
                     lastUser = currentUser;
                 }
 
+                // Üstü Çizili Yazı Mantığı
                 if ("Tamamlandı".equals(status)) {
                     stats.append("&nbsp;&nbsp;<strike style='color:gray;'>- ").append(taskName).append(" (").append(taskPuan).append(")</strike><br>");
                 } else {
@@ -61,113 +65,109 @@ public class TaskDAO {
             }
             stats.append("</body></html>");
 
+            // Görsel Bileşenler
             JEditorPane editPane = new JEditorPane("text/html", stats.toString());
             editPane.setEditable(false);
-            JOptionPane.showMessageDialog(null, new JScrollPane(editPane), "Aile Durumu (View)", JOptionPane.INFORMATION_MESSAGE);
+            JOptionPane.showMessageDialog(null, new JScrollPane(editPane), "Aile Durumu", JOptionPane.INFORMATION_MESSAGE);
+
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-
-
-    // MADDE 10: AGGREGATE Fonksiyonu ve HAVING Kullanımı
+    // MADDE 10: AGGREGATE ve HAVING (SQL Sunucuda)
     public void showFamilyStatsWithHaving() {
-        // Puanı 0'dan büyük olan aileleri SUM yaparak listeler
-        String sql = "SELECT aile_id, SUM(puan) as toplam FROM Users GROUP BY aile_id HAVING SUM(puan) >= 0 ORDER BY toplam DESC";
         try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             CallableStatement cstmt = conn.prepareCall("{call get_family_stats_having()}")) {
 
-            StringBuilder sb = new StringBuilder("Genel Aile Puan Durumu (HAVING):\n");
+            ResultSet rs = cstmt.executeQuery();
+            StringBuilder sb = new StringBuilder("Aile Puan Durumu (HAVING):\n");
             while (rs.next()) {
-                sb.append("Aile ID: ").append(rs.getInt("aile_id"))
-                        .append(" | Toplam Puan: ").append(rs.getInt("toplam")).append("\n");
+                sb.append("Aile ID: ").append(rs.getInt(1)).append(" | Puan: ").append(rs.getLong(2)).append("\n");
             }
             JOptionPane.showMessageDialog(null, sb.toString());
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // MADDE 9: UNION Kullanımı
+    // MADDE 9: UNION Kullanımı (SQL Sunucuda)
     public void showUnifiedUserList() {
-        // Ebeveynler ile en az bir görevi olan çocukları birleştirir
-        String sql = "SELECT ad, rol FROM Users WHERE rol IN ('Baba', 'Anne') " +
-                "UNION " +
-                "SELECT u.ad, u.rol FROM Users u JOIN Assignments a ON u.kullanici_id = a.kullanici_id";
         try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             CallableStatement cstmt = conn.prepareCall("{call sp_get_unified_users()}")) {
 
-            StringBuilder sb = new StringBuilder("Aktif/Ebeveyn Kullanıcı Listesi (UNION):\n");
+            ResultSet rs = cstmt.executeQuery();
+            StringBuilder sb = new StringBuilder("Aktif Sistem Kullanıcıları (UNION):\n");
             while (rs.next()) {
-                sb.append("- ").append(rs.getString("ad")).append(" (").append(rs.getString("rol")).append(")\n");
+                sb.append("- ").append(rs.getString("isim")).append(" (").append(rs.getString("meslek")).append(")\n");
             }
             JOptionPane.showMessageDialog(null, sb.toString());
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // MADDE 11: CURSOR ve RECORD Kullanımı
+    // MADDE 11: CURSOR Kullanımı (Veritabanında önceden tanımlı)
     public void callTaskCursorFunction(int userId) {
-        String sql = "SELECT * FROM get_user_tasks_cursor(?)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             CallableStatement cstmt = conn.prepareCall("{call get_user_tasks_cursor(?)}")) {
 
-            pstmt.setInt(1, userId);
-            ResultSet rs = pstmt.executeQuery();
-
-            StringBuilder sb = new StringBuilder("Görev Detaylarınız (Cursor Kaydı):\n");
+            cstmt.setInt(1, userId);
+            ResultSet rs = cstmt.executeQuery();
+            StringBuilder sb = new StringBuilder("Görev Detaylarınız (Cursor):\n");
             while (rs.next()) {
-                sb.append("Başlık: ").append(rs.getString(1))
-                        .append(" | Durum: ").append(rs.getString(2)).append("\n");
+                sb.append("GÖREV: ").append(rs.getString(1)).append(" | DURUM: ").append(rs.getString(2)).append("\n");
             }
             JOptionPane.showMessageDialog(null, sb.toString());
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // DELETE İŞLEMLERİ (MADDE 4)
+    // MADDE 4: Atama Silme (SQL Sunucuda Prosedür)
     public void deleteAssignment(int assignmentId, int familyId) {
-        String sql = "DELETE FROM Assignments WHERE atama_id = ? AND kullanici_id IN " +
-                "(SELECT kullanici_id FROM Users WHERE aile_id = ?)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, assignmentId);
-            pstmt.setInt(2, familyId);
-            int rows = pstmt.executeUpdate();
-            if (rows > 0) JOptionPane.showMessageDialog(null, "Atama başarıyla kaldırıldı.");
-            else JOptionPane.showMessageDialog(null, "Hata: Atama ID bulunamadı veya size ait değil.");
+             CallableStatement cstmt = conn.prepareCall("CALL sp_delete_assignment(?, ?)")) {
+
+            cstmt.setInt(1, assignmentId);
+            cstmt.setInt(2, familyId);
+            cstmt.execute();
+            JOptionPane.showMessageDialog(null, "Atama sistemden kaldırıldı.");
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
+    // MADDE 4: Global Görev Silme (SQL Sunucuda Prosedür Çağrısı)
     public void deleteGlobalTask(int gorevId) {
-        String sql = "DELETE FROM Tasks WHERE gorev_id = ?";
+        // Java içinde artık DELETE, FROM, WHERE kelimeleri yok
+        String sql = "CALL sp_delete_global_task(?)";
+
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, gorevId);
-            pstmt.executeUpdate();
+             CallableStatement cstmt = conn.prepareCall(sql)) {
+
+            cstmt.setInt(1, gorevId);
+            cstmt.execute();
+
             JOptionPane.showMessageDialog(null, "Görev sistemden tamamen silindi.");
-        } catch (SQLException e) { JOptionPane.showMessageDialog(null, "Hata: Görev birilerine atanmış!"); }
+        } catch (SQLException e) {
+            // Veritabanından gelen kısıt hatalarını burada yakalıyoruz
+            JOptionPane.showMessageDialog(null, "Hata: Bu görev birilerine atanmış olduğu için silinemez!");
+            e.printStackTrace();
+        }
     }
 
-    // PROCEDURE ve AUTO-ASSIGN (MADDE 4 & 8)
+    // MADDE 4 & 8: Görev Ekleme ve Otomatik Atama (Procedure)
     public void addTaskWithAutoAssign(String baslik, int puan, int creatorId) {
-        String sql = "CALL add_and_assign_task(?, ?, ?)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, baslik);
-            pstmt.setInt(2, puan);
-            pstmt.setInt(3, creatorId);
-            pstmt.execute();
-            JOptionPane.showMessageDialog(null, "Görev oluşturuldu ve otomatik atandı!");
+             CallableStatement cstmt = conn.prepareCall("CALL add_and_assign_task(?, ?, ?)")) {
+
+            cstmt.setString(1, baslik);
+            cstmt.setInt(2, puan);
+            cstmt.setInt(3, creatorId);
+            cstmt.execute();
+            JOptionPane.showMessageDialog(null, "Görev oluşturuldu ve aile bireylerine dağıtıldı.");
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
+    // Tablo Yenileme (SQL Sunucuda Fonksiyon)
     public List<Object[]> getMyPendingTasks(int userId) {
         List<Object[]> tasks = new ArrayList<>();
-        String sql = "SELECT a.atama_id, t.baslik, t.puan_degeri FROM Assignments a " +
-                "JOIN Tasks t ON a.gorev_id = t.gorev_id " +
-                "WHERE a.kullanici_id = ? AND a.durum = 'Beklemede'";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, userId);
-            ResultSet rs = pstmt.executeQuery();
+             CallableStatement cstmt = conn.prepareCall("{call sp_get_user_pending_tasks(?)}")) {
+
+            cstmt.setInt(1, userId);
+            ResultSet rs = cstmt.executeQuery();
             while (rs.next()) {
                 tasks.add(new Object[]{rs.getInt("atama_id"), rs.getString("baslik"), rs.getInt("puan_degeri")});
             }
@@ -175,37 +175,30 @@ public class TaskDAO {
         return tasks;
     }
 
-    // UPDATE ve TRIGGER (MADDE 4 & 12)
+    // MADDE 12: Görev Tamamlama ve TRIGGER Tetikleme
     public void markAsCompleted(int assignmentId) {
-        String sql = "UPDATE Assignments SET durum = 'Tamamlandı' WHERE atama_id = ?";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, assignmentId);
-            pstmt.executeUpdate();
+             CallableStatement cstmt = conn.prepareCall("CALL sp_complete_task(?)")) {
+            cstmt.setInt(1, assignmentId);
+            cstmt.execute();
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // FONKSİYON: Dağıtım Algoritması
+    // Otomatik Dağıtım (SQL Sunucuda Fonksiyon)
     public void distributeTasksAtLogin(int familyId) {
-        String sql = "SELECT distribute_tasks_load_sharing(?)";
         try (Connection conn = DatabaseConnection.getConnection();
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, familyId);
-            pstmt.execute();
+             CallableStatement cstmt = conn.prepareCall("{call distribute_tasks_load_sharing(?)}")) {
+            cstmt.setInt(1, familyId);
+            cstmt.execute();
         } catch (SQLException e) { e.printStackTrace(); }
     }
 
-    // SIFIRLAMA (TRUNCATE & SEQUENCE RESTART)
+    // Sistem Sıfırlama (SQL Sunucuda Prosedür)
     public void resetSystemAndExit() {
-        String sql1 = "UPDATE Users SET puan = 0";
-        String sql2 = "TRUNCATE TABLE Assignments RESTART IDENTITY";
         try (Connection conn = DatabaseConnection.getConnection();
-             Statement stmt = conn.createStatement()) {
-            conn.setAutoCommit(false);
-            stmt.executeUpdate(sql1);
-            stmt.executeUpdate(sql2);
-            conn.commit();
-            System.out.println("Sistem sıfırlandı.");
+             CallableStatement cstmt = conn.prepareCall("CALL sp_reset_system()")) {
+            cstmt.execute();
+            System.out.println("Sistem başarıyla sıfırlandı.");
         } catch (SQLException e) { e.printStackTrace(); }
     }
 }
