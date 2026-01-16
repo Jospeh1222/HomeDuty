@@ -5,7 +5,7 @@
 -- Dumped from database version 17.5
 -- Dumped by pg_dump version 17.5
 
--- Started on 2026-01-06 22:15:13
+-- Started on 2026-01-15 09:49:15
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -20,7 +20,7 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- TOC entry 229 (class 1255 OID 16826)
+-- TOC entry 232 (class 1255 OID 16826)
 -- Name: add_and_assign_task(character varying, integer, integer); Type: PROCEDURE; Schema: public; Owner: -
 --
 
@@ -61,7 +61,7 @@ $$;
 
 
 --
--- TOC entry 241 (class 1255 OID 16833)
+-- TOC entry 244 (class 1255 OID 16833)
 -- Name: distribute_tasks_load_sharing(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -103,7 +103,7 @@ $$;
 
 
 --
--- TOC entry 228 (class 1255 OID 16817)
+-- TOC entry 230 (class 1255 OID 16817)
 -- Name: fnc_new_task_notice(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -118,7 +118,7 @@ $$;
 
 
 --
--- TOC entry 227 (class 1255 OID 16815)
+-- TOC entry 229 (class 1255 OID 16815)
 -- Name: fnc_update_puan(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -138,7 +138,7 @@ $$;
 
 
 --
--- TOC entry 226 (class 1255 OID 16814)
+-- TOC entry 228 (class 1255 OID 16814)
 -- Name: get_user_tasks_cursor(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -162,6 +162,181 @@ BEGIN
         RETURN NEXT;
     END LOOP;
     CLOSE task_cursor;
+END;
+$$;
+
+
+--
+-- TOC entry 248 (class 1255 OID 16896)
+-- Name: sp_complete_task(integer); Type: PROCEDURE; Schema: public; Owner: -
+--
+
+CREATE PROCEDURE public.sp_complete_task(IN p_atama_id integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    UPDATE Assignments SET durum = 'Tamamlandı' WHERE atama_id = p_atama_id;
+END;
+$$;
+
+
+--
+-- TOC entry 249 (class 1255 OID 16897)
+-- Name: sp_delete_assignment(integer, integer); Type: PROCEDURE; Schema: public; Owner: -
+--
+
+CREATE PROCEDURE public.sp_delete_assignment(IN p_atama_id integer, IN p_family_id integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    DELETE FROM Assignments WHERE atama_id = p_atama_id AND kullanici_id IN 
+    (SELECT kullanici_id FROM Users WHERE aile_id = p_family_id);
+END;
+$$;
+
+
+--
+-- TOC entry 251 (class 1255 OID 16899)
+-- Name: sp_delete_global_task(integer); Type: PROCEDURE; Schema: public; Owner: -
+--
+
+CREATE PROCEDURE public.sp_delete_global_task(IN p_gorev_id integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Eğer Assignments tablosunda ON DELETE CASCADE yoksa 
+    -- önce atamaları silmek gerekebilir, ancak senin şemanda CASCADE var.
+    DELETE FROM Tasks WHERE gorev_id = p_gorev_id;
+END;
+$$;
+
+
+--
+-- TOC entry 245 (class 1255 OID 16903)
+-- Name: sp_get_family_details(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_get_family_details(p_family_id integer) RETURNS TABLE(k_adi character varying, t_puan integer, g_adi character varying, g_puani integer, g_durumu character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT kullanici_adi, toplam_puan, gorev_adi, gorev_puani, gorev_durumu 
+    FROM vw_family_task_details 
+    WHERE aile_id = p_family_id
+    ORDER BY kullanici_adi ASC;
+END;
+$$;
+
+
+--
+-- TOC entry 246 (class 1255 OID 16894)
+-- Name: sp_get_unified_users(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_get_unified_users() RETURNS TABLE(isim character varying, meslek character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT ad, rol FROM Users WHERE rol IN ('Baba', 'Anne')
+    UNION
+    SELECT u.ad, u.rol FROM Users u JOIN Assignments a ON u.kullanici_id = a.kullanici_id;
+END;
+$$;
+
+
+--
+-- TOC entry 227 (class 1255 OID 16909)
+-- Name: sp_get_user_by_id(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_get_user_by_id(p_id integer) RETURNS TABLE(id integer, isim character varying, gorev_rol character varying, skorpuan integer, aile integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT kullanici_id, ad, rol, puan, aile_id 
+    FROM Users 
+    WHERE kullanici_id = p_id;
+END;
+$$;
+
+
+--
+-- TOC entry 247 (class 1255 OID 16895)
+-- Name: sp_get_user_pending_tasks(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_get_user_pending_tasks(p_uid integer) RETURNS TABLE(atama_id integer, baslik character varying, puan_degeri integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT a.atama_id, t.baslik, t.puan_degeri 
+    FROM Assignments a JOIN Tasks t ON a.gorev_id = t.gorev_id
+    WHERE a.kullanici_id = p_uid AND a.durum = 'Beklemede';
+END;
+$$;
+
+
+--
+-- TOC entry 252 (class 1255 OID 16907)
+-- Name: sp_login_user(character varying); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_login_user(p_ad character varying) RETURNS TABLE(id integer, isim character varying, gorev_rol character varying, skorpuan integer, aile integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY 
+    SELECT kullanici_id, ad, rol, puan, aile_id 
+    FROM Users 
+    WHERE ad = p_ad;
+END;
+$$;
+
+
+--
+-- TOC entry 226 (class 1255 OID 16908)
+-- Name: sp_register_user(character varying, character varying, integer); Type: PROCEDURE; Schema: public; Owner: -
+--
+
+CREATE PROCEDURE public.sp_register_user(IN p_ad character varying, IN p_rol character varying, IN p_aile_id integer)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    INSERT INTO Users (ad, rol, aile_id, puan) 
+    VALUES (p_ad, p_rol, p_aile_id, 0);
+END;
+$$;
+
+
+--
+-- TOC entry 250 (class 1255 OID 16898)
+-- Name: sp_reset_system(); Type: PROCEDURE; Schema: public; Owner: -
+--
+
+CREATE PROCEDURE public.sp_reset_system()
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    UPDATE Users SET puan = 0;
+    TRUNCATE TABLE Assignments RESTART IDENTITY;
+END;
+$$;
+
+
+--
+-- TOC entry 231 (class 1255 OID 16892)
+-- Name: sp_search_tasks(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sp_search_tasks(p_keyword text) RETURNS TABLE(id integer, isim character varying)
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RETURN QUERY SELECT gorev_id, baslik FROM Tasks WHERE baslik ILIKE '%' || p_keyword || '%';
 END;
 $$;
 
@@ -198,7 +373,7 @@ CREATE SEQUENCE public.assignments_atama_id_seq
 
 
 --
--- TOC entry 4947 (class 0 OID 0)
+-- TOC entry 4958 (class 0 OID 0)
 -- Dependencies: 223
 -- Name: assignments_atama_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -232,7 +407,7 @@ CREATE SEQUENCE public.families_aile_id_seq
 
 
 --
--- TOC entry 4948 (class 0 OID 0)
+-- TOC entry 4959 (class 0 OID 0)
 -- Dependencies: 217
 -- Name: families_aile_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -297,7 +472,7 @@ CREATE SEQUENCE public.users_kullanici_id_seq
 
 
 --
--- TOC entry 4949 (class 0 OID 0)
+-- TOC entry 4960 (class 0 OID 0)
 -- Dependencies: 219
 -- Name: users_kullanici_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
@@ -323,7 +498,7 @@ CREATE VIEW public.vw_family_task_details AS
 
 
 --
--- TOC entry 4770 (class 2604 OID 16879)
+-- TOC entry 4781 (class 2604 OID 16879)
 -- Name: assignments atama_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -331,7 +506,7 @@ ALTER TABLE ONLY public.assignments ALTER COLUMN atama_id SET DEFAULT nextval('p
 
 
 --
--- TOC entry 4766 (class 2604 OID 16880)
+-- TOC entry 4777 (class 2604 OID 16880)
 -- Name: families aile_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -339,7 +514,7 @@ ALTER TABLE ONLY public.families ALTER COLUMN aile_id SET DEFAULT nextval('publi
 
 
 --
--- TOC entry 4767 (class 2604 OID 16881)
+-- TOC entry 4778 (class 2604 OID 16881)
 -- Name: users kullanici_id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -347,7 +522,7 @@ ALTER TABLE ONLY public.users ALTER COLUMN kullanici_id SET DEFAULT nextval('pub
 
 
 --
--- TOC entry 4941 (class 0 OID 16790)
+-- TOC entry 4952 (class 0 OID 16790)
 -- Dependencies: 224
 -- Data for Name: assignments; Type: TABLE DATA; Schema: public; Owner: -
 --
@@ -357,7 +532,7 @@ COPY public.assignments (atama_id, gorev_id, kullanici_id, durum) FROM stdin;
 
 
 --
--- TOC entry 4935 (class 0 OID 16757)
+-- TOC entry 4946 (class 0 OID 16757)
 -- Dependencies: 218
 -- Data for Name: families; Type: TABLE DATA; Schema: public; Owner: -
 --
@@ -377,7 +552,7 @@ COPY public.families (aile_id, aile_adi) FROM stdin;
 
 
 --
--- TOC entry 4939 (class 0 OID 16782)
+-- TOC entry 4950 (class 0 OID 16782)
 -- Dependencies: 222
 -- Data for Name: tasks; Type: TABLE DATA; Schema: public; Owner: -
 --
@@ -399,13 +574,12 @@ COPY public.tasks (gorev_id, baslik, puan_degeri, zorluk_seviyesi) FROM stdin;
 
 
 --
--- TOC entry 4937 (class 0 OID 16764)
+-- TOC entry 4948 (class 0 OID 16764)
 -- Dependencies: 220
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 COPY public.users (kullanici_id, ad, rol, aile_id, puan) FROM stdin;
-1	Yusuf	Baba	1	0
 2	Başar	Çocuk	1	0
 12	Nisa	Anne	2	0
 3	Ahmet	Çocuk	2	0
@@ -435,11 +609,12 @@ COPY public.users (kullanici_id, ad, rol, aile_id, puan) FROM stdin;
 29	Zeynep	Anne	3	0
 30	Yıldız	Çocuk	9	0
 31	Defne	Çocuk	10	0
+1	Yusuf	Baba	1	0
 \.
 
 
 --
--- TOC entry 4950 (class 0 OID 0)
+-- TOC entry 4961 (class 0 OID 0)
 -- Dependencies: 223
 -- Name: assignments_atama_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
@@ -448,7 +623,7 @@ SELECT pg_catalog.setval('public.assignments_atama_id_seq', 1, false);
 
 
 --
--- TOC entry 4951 (class 0 OID 0)
+-- TOC entry 4962 (class 0 OID 0)
 -- Dependencies: 217
 -- Name: families_aile_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
@@ -457,7 +632,7 @@ SELECT pg_catalog.setval('public.families_aile_id_seq', 10, true);
 
 
 --
--- TOC entry 4952 (class 0 OID 0)
+-- TOC entry 4963 (class 0 OID 0)
 -- Dependencies: 221
 -- Name: gorev_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
@@ -466,7 +641,7 @@ SELECT pg_catalog.setval('public.gorev_id_seq', 116, true);
 
 
 --
--- TOC entry 4953 (class 0 OID 0)
+-- TOC entry 4964 (class 0 OID 0)
 -- Dependencies: 219
 -- Name: users_kullanici_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
 --
@@ -475,7 +650,7 @@ SELECT pg_catalog.setval('public.users_kullanici_id_seq', 31, true);
 
 
 --
--- TOC entry 4782 (class 2606 OID 16796)
+-- TOC entry 4793 (class 2606 OID 16796)
 -- Name: assignments assignments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -484,7 +659,7 @@ ALTER TABLE ONLY public.assignments
 
 
 --
--- TOC entry 4775 (class 2606 OID 16762)
+-- TOC entry 4786 (class 2606 OID 16762)
 -- Name: families families_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -493,7 +668,7 @@ ALTER TABLE ONLY public.families
 
 
 --
--- TOC entry 4780 (class 2606 OID 16788)
+-- TOC entry 4791 (class 2606 OID 16788)
 -- Name: tasks tasks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -502,7 +677,7 @@ ALTER TABLE ONLY public.tasks
 
 
 --
--- TOC entry 4777 (class 2606 OID 16772)
+-- TOC entry 4788 (class 2606 OID 16772)
 -- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -511,7 +686,7 @@ ALTER TABLE ONLY public.users
 
 
 --
--- TOC entry 4778 (class 1259 OID 16807)
+-- TOC entry 4789 (class 1259 OID 16807)
 -- Name: idx_task_title; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -519,7 +694,7 @@ CREATE INDEX idx_task_title ON public.tasks USING btree (baslik);
 
 
 --
--- TOC entry 4787 (class 2620 OID 16816)
+-- TOC entry 4798 (class 2620 OID 16816)
 -- Name: assignments trg_assignment_puan; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -527,7 +702,7 @@ CREATE TRIGGER trg_assignment_puan AFTER UPDATE ON public.assignments FOR EACH R
 
 
 --
--- TOC entry 4786 (class 2620 OID 16818)
+-- TOC entry 4797 (class 2620 OID 16818)
 -- Name: tasks trg_new_task; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -535,7 +710,7 @@ CREATE TRIGGER trg_new_task AFTER INSERT ON public.tasks FOR EACH ROW EXECUTE FU
 
 
 --
--- TOC entry 4784 (class 2606 OID 16797)
+-- TOC entry 4795 (class 2606 OID 16797)
 -- Name: assignments assignments_gorev_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -544,7 +719,7 @@ ALTER TABLE ONLY public.assignments
 
 
 --
--- TOC entry 4785 (class 2606 OID 16802)
+-- TOC entry 4796 (class 2606 OID 16802)
 -- Name: assignments assignments_kullanici_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -553,7 +728,7 @@ ALTER TABLE ONLY public.assignments
 
 
 --
--- TOC entry 4783 (class 2606 OID 16773)
+-- TOC entry 4794 (class 2606 OID 16773)
 -- Name: users users_aile_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -561,7 +736,7 @@ ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_aile_id_fkey FOREIGN KEY (aile_id) REFERENCES public.families(aile_id) ON DELETE CASCADE;
 
 
--- Completed on 2026-01-06 22:15:13
+-- Completed on 2026-01-15 09:49:15
 
 --
 -- PostgreSQL database dump complete
