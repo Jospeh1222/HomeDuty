@@ -81,17 +81,19 @@ END;
 $$;
 
 -- Atama durumu 'Tamamlandı' olduğunda kullanıcının puanını günceller ve bildirim verir
-CREATE FUNCTION fnc_update_puan() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
+CREATE OR REPLACE FUNCTION fnc_update_puan() RETURNS trigger
+LANGUAGE plpgsql AS $$
 BEGIN
-
-    IF (TG_OP = 'UPDATE' AND NEW.durum = 'Tamamlandı' AND OLD.durum != 'Tamamlandı') 
-       OR (TG_OP = 'INSERT') THEN
-        
-        -- Sadece atama yapıldığını haber ver
-        RAISE NOTICE 'Puan değeri başarıyla atandı.'; 
+    IF (TRIM(NEW.durum) = 'Tamamlandı' AND (OLD.durum IS NULL OR TRIM(OLD.durum) != 'Tamamlandı')) THEN
+        -- Kullanıcı puanını güncelle
+        UPDATE Users 
+        SET puan = puan + (SELECT puan_degeri FROM Tasks WHERE gorev_id = NEW.gorev_id)
+        WHERE kullanici_id = NEW.kullanici_id;
+        RAISE NOTICE 'SİSTEM: Puan başarıyla eklendi!';
+    ELSE
+        RAISE NOTICE 'UYARI: Şart sağlanmadığı için puan eklenmedi. Mevcut durum: %', NEW.durum;
     END IF;
+    
     RETURN NEW;
 END; $$;
 

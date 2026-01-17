@@ -174,9 +174,20 @@ public class TaskDAO {
     public void markAsCompleted(int assignmentId) {
         try (Connection conn = DatabaseConnection.getConnection();
              CallableStatement cstmt = conn.prepareCall("CALL sp_complete_task(?)")) {
+
             cstmt.setInt(1, assignmentId);
-            cstmt.execute();
-        } catch (SQLException e) { e.printStackTrace(); }
+            cstmt.execute(); // Trigger burada çalışır
+
+            // Trigger'dan gelen RAISE NOTICE mesajını yakala
+            SQLWarning warning = cstmt.getWarnings();
+            if (warning != null) {
+                JOptionPane.showMessageDialog(null, warning.getMessage());
+            } else {
+                JOptionPane.showMessageDialog(null, "Görev tamamlandı olarak işaretlendi.");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public void distributeTasksAtLogin(int familyId) {
